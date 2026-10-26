@@ -1,0 +1,31 @@
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: simera-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: simera
+      POSTGRES_PASSWORD: simera_dev_password
+      POSTGRES_DB: simera_db
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: simera-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: simera
+      RABBITMQ_DEFAULT_PASS: rabbitmq_dev_password
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
