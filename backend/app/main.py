@@ -1,12 +1,13 @@
 
 from fastapi import FastAPI
+import app.infrastructure.persistence.models
 
-app = FastAPI(
-    title="Simera API",
-    description="Resume Parsing & Data Enrichment",
-    version="1.0.0"
+from app.presentation.routers.auth_router import router as auth_router
+
+
+app = FastAPI(title="Simera API")
+
+app.include_router(
+    auth_router,
+    prefix="/api/v1"
 )
-
-@app.get("/health", tags=["Health"])
-def health_check():
-    return {"status": "healthy"}
