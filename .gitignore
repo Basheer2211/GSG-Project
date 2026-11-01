@@ -14,6 +14,9 @@ __pycache__/
 
 # Uploaded files
 uploads/
+# Where LocalFileStorage saves uploads. Don't use a bare "storage/" here:
+# it would also hide the code folder app/infrastructure/storage/.
+**/storage/cvs/
 
 # Logs
 *.log
