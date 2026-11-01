@@ -87,3 +87,7 @@ class ProfileModel(Base):
         "UserModel",
         back_populates="profile"
     )
+    source_files: Mapped[list["SourceFileModel"]] = relationship(
+    "SourceFileModel",
+    back_populates="profile"
+)
