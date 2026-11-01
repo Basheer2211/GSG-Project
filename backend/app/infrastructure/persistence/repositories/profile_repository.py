@@ -62,10 +62,14 @@ class ProfileRepository(IProfileRepository):
         return Profile(
             profile_id=model.profile_id,
             user_id=model.user_id,
-            full_name=model.full_name,
+            first_name=model.first_name,
+            last_name=model.last_name,
             email=model.email,
             phone=model.phone,
             city=model.city,
+            country_id=model.country_id,
             title=model.title,
-            country_id=model.country_id
+            summary=model.summary,
+            final_json=model.final_json,
+            updated_at=model.updated_at
         )

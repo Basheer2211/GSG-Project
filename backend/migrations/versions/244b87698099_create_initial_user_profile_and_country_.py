@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -26,28 +27,32 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('email', sa.String(length=255), nullable=False),
     sa.Column('password_hash', sa.String(length=255), nullable=False),
-    sa.Column('role', sa.Enum('user', 'admin', 'reviewer', name='user_role'), server_default=sa.text("'user'"), nullable=False),
+    sa.Column('role', sa.Enum('candidate', 'reviewer', 'administrator', name='user_role'), server_default=sa.text("'candidate'"), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('user_id'),
     sa.UniqueConstraint('email')
     )
     op.create_table('country',
     sa.Column('country_id', sa.Integer(), autoincrement=True, nullable=False),
-    sa.Column('name', sa.String(length=100), nullable=False),
-    sa.Column('code', sa.CHAR(length=2), nullable=False),
+    sa.Column('country_name', sa.String(length=100), nullable=False),
+    sa.Column('country_code', sa.CHAR(length=2), nullable=False),
     sa.PrimaryKeyConstraint('country_id'),
-    sa.UniqueConstraint('code'),
-    sa.UniqueConstraint('name')
+    sa.UniqueConstraint('country_code'),
+    sa.UniqueConstraint('country_name')
     )
     op.create_table('profile',
     sa.Column('profile_id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('full_name', sa.String(length=255), nullable=True),
+    sa.Column('first_name', sa.String(length=100), nullable=True),
+    sa.Column('last_name', sa.String(length=100), nullable=True),
     sa.Column('email', sa.String(length=255), nullable=True),
     sa.Column('phone', sa.String(length=50), nullable=True),
     sa.Column('city', sa.String(length=100), nullable=True),
-    sa.Column('title', sa.String(length=255), nullable=True),
     sa.Column('country_id', sa.Integer(), nullable=True),
+    sa.Column('title', sa.String(length=255), nullable=True),
+    sa.Column('summary', sa.Text(), nullable=True),
+    sa.Column('final_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['country_id'], ['country.country_id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['app_user.user_id'], ),
     sa.PrimaryKeyConstraint('profile_id'),
@@ -63,3 +68,7 @@ def downgrade() -> None:
     op.drop_table('country')
     op.drop_table('app_user')
     # ### end Alembic commands ###
+
+    # drop_table does not remove Postgres enum types, so drop it explicitly;
+    # otherwise a later upgrade fails with 'type "user_role" already exists'.
+    sa.Enum(name='user_role').drop(op.get_bind(), checkfirst=True)

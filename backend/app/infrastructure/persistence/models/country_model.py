@@ -14,13 +14,13 @@ class CountryModel(Base):
         autoincrement=True
     )
 
-    name: Mapped[str] = mapped_column(
+    country_name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
         unique=True
     )
 
-    code: Mapped[str] = mapped_column(
+    country_code: Mapped[str] = mapped_column(
         CHAR(2),
         nullable=False,
         unique=True

@@ -67,7 +67,7 @@ class AuthService:
             name=data.name.strip(),
             email=email,
             password_hash=hash_password(data.password),
-            role=UserRole.USER
+            role=UserRole.CANDIDATE
         )
 
         return self.user_repository.create(user)

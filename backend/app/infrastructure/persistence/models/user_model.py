@@ -51,8 +51,8 @@ class UserModel(Base):
             native_enum=True
         ),
         nullable=False,
-        default=UserRole.USER,
-        server_default=text("'user'")
+        default=UserRole.CANDIDATE,
+        server_default=text("'candidate'")
     )
 
     created_at: Mapped[datetime] = mapped_column(

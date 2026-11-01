@@ -15,7 +15,11 @@ dependencies = [
     "psycopg[binary]",
     "alembic",
     "pydantic-settings",
-    "python-multipart"
+    "python-multipart",
+    "pydantic[email]",
+    "pwdlib[argon2]",
+    "PyJWT",
+    "filetype"
 ]
 
 [tool.setuptools.packages.find]
