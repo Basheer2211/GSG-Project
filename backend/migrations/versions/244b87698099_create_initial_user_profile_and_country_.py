@@ -68,3 +68,7 @@ def downgrade() -> None:
     op.drop_table('country')
     op.drop_table('app_user')
     # ### end Alembic commands ###
+
+    # drop_table does not remove Postgres enum types, so drop it explicitly;
+    # otherwise a later upgrade fails with 'type "user_role" already exists'.
+    sa.Enum(name='user_role').drop(op.get_bind(), checkfirst=True)
