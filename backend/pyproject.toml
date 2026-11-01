@@ -21,6 +21,16 @@ dependencies = [
     "PyJWT"
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx2"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["app*"]
