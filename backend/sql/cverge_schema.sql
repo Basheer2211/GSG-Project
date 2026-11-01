@@ -1,6 +1,6 @@
 -- ---------- ENUMS ----------
-CREATE TYPE user_role   AS ENUM ('user', 'admin', 'reviewer');
-CREATE TYPE file_type   AS ENUM ('pdf', 'markdown', 'doc', 'json');
+CREATE TYPE user_role   AS ENUM ('candidate', 'reviewer', 'administrator');  -- requirements.md §2.10
+CREATE TYPE file_type   AS ENUM ('pdf', 'docx', 'md', 'json');  -- file extension without the dot
 CREATE TYPE file_status AS ENUM ('uploaded', 'processing', 'done', 'failed', 'needs_review');
 CREATE TYPE link_type   AS ENUM ('linkedin', 'github', 'portfolio', 'website', 'other');
 
@@ -10,8 +10,8 @@ CREATE TABLE app_user (
   name          VARCHAR(255) NOT NULL,
   email         VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255),                   -- NULL for accounts that only use social login
-  role          user_role NOT NULL DEFAULT 'user',
-  created_at    TIMESTAMP DEFAULT now()
+  role          user_role NOT NULL DEFAULT 'candidate',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Social login: one row per provider account linked to a user
@@ -44,7 +44,7 @@ CREATE TABLE profile (
   title       VARCHAR(255),
   summary     TEXT,
   final_json  JSONB,                            -- the complete, merged, ready-to-use profile
-  updated_at  TIMESTAMP DEFAULT now()
+  updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
 -- Keep profile.updated_at fresh on every update (PostgreSQL has no ON UPDATE)
@@ -71,9 +71,9 @@ CREATE TABLE source_file (
   extraction_method VARCHAR(20),                -- text | ocr | parser | direct
   ocr_confidence    REAL CHECK (ocr_confidence BETWEEN 0 AND 1),
   error_message     TEXT,
-  num_of_retries    INT DEFAULT 0,              -- processing retries used so far
+  "Num_Of_Retries"  INT NOT NULL DEFAULT 0,     -- processing retries used so far (quoted: name used by the Alembic migration)
   llm_response      JSONB,                      -- raw LLM output, for debugging
-  uploaded_at       TIMESTAMP DEFAULT now(),
+  uploaded_at       TIMESTAMP NOT NULL DEFAULT now(),
   finished_at       TIMESTAMP
 );
 
@@ -166,7 +166,7 @@ CREATE TABLE extracted_field (
 );
 
 -- ---------- HUMAN REVIEW QUEUE ----------
--- Resolved by a user whose role is 'reviewer' or 'admin' (enforced in the backend).
+-- Resolved by a user whose role is 'reviewer' or 'administrator' (enforced in the backend).
 -- file_id = the source file that triggered the review.
 -- Every conflicting value, with the file it came from, is stored as one row
 -- in review_option, so the reviewer can see the source of each value.
@@ -178,7 +178,7 @@ CREATE TABLE review_item (
   assigned_to_candidate BOOLEAN DEFAULT FALSE,  -- reviewer sent this item to the candidate
   sent_to_candidate_at  TIMESTAMP,
   resolved       BOOLEAN DEFAULT FALSE,
-  resolved_by    INT REFERENCES app_user(user_id),   -- reviewer, admin or the candidate
+  resolved_by    INT REFERENCES app_user(user_id),   -- reviewer, administrator or the candidate
   resolved_value TEXT,
   created_at     TIMESTAMP DEFAULT now(),
   resolved_at    TIMESTAMP
@@ -286,7 +286,7 @@ INSERT INTO skill_alias (skill_id, alias_name) VALUES
 
 CREATE VIEW v_dash_summary AS
 SELECT
-  (SELECT COUNT(*) FROM app_user WHERE role = 'user')              AS total_users,
+  (SELECT COUNT(*) FROM app_user WHERE role = 'candidate')         AS total_candidates,
   (SELECT COUNT(*) FROM profile)                                   AS total_profiles,
   (SELECT COUNT(*) FROM source_file)                               AS total_files,
   (SELECT COUNT(*) FROM source_file WHERE status = 'done')         AS files_done,
