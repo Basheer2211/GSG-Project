@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -33,21 +34,25 @@ def upgrade() -> None:
     )
     op.create_table('country',
     sa.Column('country_id', sa.Integer(), autoincrement=True, nullable=False),
-    sa.Column('name', sa.String(length=100), nullable=False),
-    sa.Column('code', sa.CHAR(length=2), nullable=False),
+    sa.Column('country_name', sa.String(length=100), nullable=False),
+    sa.Column('country_code', sa.CHAR(length=2), nullable=False),
     sa.PrimaryKeyConstraint('country_id'),
-    sa.UniqueConstraint('code'),
-    sa.UniqueConstraint('name')
+    sa.UniqueConstraint('country_code'),
+    sa.UniqueConstraint('country_name')
     )
     op.create_table('profile',
     sa.Column('profile_id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('full_name', sa.String(length=255), nullable=True),
+    sa.Column('first_name', sa.String(length=100), nullable=True),
+    sa.Column('last_name', sa.String(length=100), nullable=True),
     sa.Column('email', sa.String(length=255), nullable=True),
     sa.Column('phone', sa.String(length=50), nullable=True),
     sa.Column('city', sa.String(length=100), nullable=True),
-    sa.Column('title', sa.String(length=255), nullable=True),
     sa.Column('country_id', sa.Integer(), nullable=True),
+    sa.Column('title', sa.String(length=255), nullable=True),
+    sa.Column('summary', sa.Text(), nullable=True),
+    sa.Column('final_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['country_id'], ['country.country_id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['app_user.user_id'], ),
     sa.PrimaryKeyConstraint('profile_id'),
