@@ -6,4 +6,7 @@ psycopg[binary]
 alembic
 pydantic-settings
 python-multipart
+pydantic[email]
+pwdlib[argon2]
+PyJWT
 
