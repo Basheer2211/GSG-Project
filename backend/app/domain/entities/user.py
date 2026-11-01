@@ -11,5 +11,5 @@ class User:
     name: str
     email: str
     password_hash: str
-    role: UserRole = UserRole.USER
+    role: UserRole = UserRole.CANDIDATE
     created_at: datetime | None = None
