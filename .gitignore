@@ -18,3 +18,5 @@ storage/
 
 # Logs
 *.log
+
+*.egg-info/
