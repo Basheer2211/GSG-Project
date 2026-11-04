@@ -1,6 +1,7 @@
 
 import hashlib
 import json
+import logging
 import zipfile
 
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ import filetype
 
 from app.application.dto.RequestDto.upload_file_dto import UploadFileDTO
 from app.application.interfaces.file_storage import IFileStorage
+from app.application.interfaces.message_publisher import IMessagePublisher
 from app.application.interfaces.unit_of_work import IUnitOfWork
 
 from app.domain.entities.source_file import SourceFile
@@ -22,7 +24,12 @@ from app.core.exceptions import (
     EmptyFileError,
     FileTooLargeError,
     InvalidFileContentError,
+    DuplicateFileError,
+    DuplicateSourceFileHashError,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -36,11 +43,13 @@ class ValidatedFile:
 
 @dataclass
 class UploadCVResult:
-    file_id: int
+    file_id: int          # also the job reference (one job per source file)
     filename: str
     storage_path: str
     size: int
     file_hash: str
+    status: str
+    queued: bool          # False when publishing to the worker queue failed
 
 
 class FileService:
@@ -53,11 +62,13 @@ class FileService:
         storage: IFileStorage,
         source_file_repository: ISourceFileRepository,
         profile_repository: IProfileRepository,
-        unit_of_work: IUnitOfWork
+        unit_of_work: IUnitOfWork,
+        message_publisher: IMessagePublisher
     ):
         self.storage = storage
         self.source_file_repository = source_file_repository
         self.profile_repository = profile_repository
+        self.message_publisher = message_publisher
         self.unit_of_work = unit_of_work
 
     def validate_file(
@@ -170,17 +181,13 @@ class FileService:
         user_id: int
     ) -> UploadCVResult:
 
-        # Step 1: Validate file
+        # Step 1: Validate file and compute its SHA-256 hash
         validated_file = self.validate_file(file)
 
-        # Step 2: Save file to storage
-        storage_path = self.storage.save(
-            validated_file.content,
-            validated_file.extension
-        )
+        storage_path: str | None = None
 
         try:
-            # Step 3: Get or create user profile
+            # Step 2: Get or create user profile
             profile = self.profile_repository.get_or_create_by_user_id(
                 user_id
             )
@@ -190,7 +197,23 @@ class FileService:
                     "Profile ID was not generated"
                 )
 
-            # Step 4: Create SourceFile entity
+            # Step 3: Duplicate detection (hash is unique per candidate).
+            # Done before storing, so an identical upload changes nothing.
+            existing = self.source_file_repository.get_by_profile_and_hash(
+                profile.profile_id,
+                validated_file.file_hash
+            )
+
+            if existing is not None:
+                self._raise_duplicate(profile.profile_id, existing)
+
+            # Step 4: Save the original file (write-once storage)
+            storage_path = self.storage.save(
+                validated_file.content,
+                validated_file.extension
+            )
+
+            # Step 5: Create the job (a source_file with status 'uploaded')
             source_file = SourceFile(
                 file_id=None,
                 profile_id=profile.profile_id,
@@ -201,10 +224,28 @@ class FileService:
                 status="uploaded"
             )
 
-            # Step 5: Insert metadata into database
-            saved_file = self.source_file_repository.create(
-                source_file
-            )
+            try:
+                saved_file = self.source_file_repository.create(
+                    source_file
+                )
+
+            except DuplicateSourceFileHashError:
+                # Another request with the same file won the race
+                self.unit_of_work.rollback()
+                self.storage.discard(storage_path)
+                storage_path = None
+
+                existing = (
+                    self.source_file_repository.get_by_profile_and_hash(
+                        profile.profile_id,
+                        validated_file.file_hash
+                    )
+                )
+
+                if existing is None:
+                    raise
+
+                self._raise_duplicate(profile.profile_id, existing)
 
             if saved_file.file_id is None:
                 raise RuntimeError(
@@ -214,16 +255,61 @@ class FileService:
             # Step 6: Commit transaction
             self.unit_of_work.commit()
 
-            # Step 7: Return result
-            return UploadCVResult(
-                file_id=saved_file.file_id,
-                filename=validated_file.filename,
-                storage_path=storage_path,
-                size=validated_file.size,
-                file_hash=validated_file.file_hash
-            )
-
-        except Exception:
-            # Rollback all database changes
+        except DuplicateFileError:
             self.unit_of_work.rollback()
             raise
+
+        except Exception:
+            # Rollback all database changes and remove the file that never
+            # became a source
+            self.unit_of_work.rollback()
+
+            if storage_path is not None:
+                self.storage.discard(storage_path)
+
+            raise
+
+        # Step 7: Hand the job to the workers. The job is already saved, so a
+        # broker failure must not fail the upload (NFR-010 / NFR-012); the job
+        # stays 'uploaded' and can be picked up later.
+        queued = True
+
+        try:
+            self.message_publisher.publish_file_job(saved_file.file_id)
+
+        except Exception:
+            queued = False
+            logger.exception(
+                "Could not enqueue job %s; it stays 'uploaded'",
+                saved_file.file_id
+            )
+
+        # Step 8: Return the job reference immediately (FR-013)
+        return UploadCVResult(
+            file_id=saved_file.file_id,
+            filename=validated_file.filename,
+            storage_path=storage_path,
+            size=validated_file.size,
+            file_hash=validated_file.file_hash,
+            status=saved_file.status,
+            queued=queued
+        )
+
+    @staticmethod
+    def _raise_duplicate(profile_id: int, existing: SourceFile) -> None:
+        if existing.file_id is None:
+            raise RuntimeError("Existing file has no ID")
+
+        # FR-055: every blocked duplicate is logged
+        logger.info(
+            "Blocked duplicate upload: profile_id=%s existing_file_id=%s "
+            "file_hash=%s",
+            profile_id,
+            existing.file_id,
+            existing.file_hash
+        )
+
+        raise DuplicateFileError(
+            existing_file_id=existing.file_id,
+            existing_status=existing.status
+        )

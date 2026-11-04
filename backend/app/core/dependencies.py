@@ -15,6 +15,7 @@ from app.domain.interfaces.source_file_repository import ISourceFileRepository
 # Application Interfaces
 from app.application.interfaces.file_storage import IFileStorage
 from app.application.interfaces.unit_of_work import IUnitOfWork
+from app.application.interfaces.message_publisher import IMessagePublisher
 
 # Repositories
 from app.infrastructure.persistence.repositories.user_repository import UserRepository
@@ -24,6 +25,12 @@ from app.infrastructure.persistence.repositories.file_repository import SourceFi
 # Infrastructure
 from app.infrastructure.storage.local_file_storage import LocalFileStorage
 from app.infrastructure.persistence.repositories.unit_of_work import SqlAlchemyUnitOfWork
+from app.infrastructure.messaging.rabbitmq_publisher import (
+    RabbitMQPublisher,
+    LoggingPublisher,
+)
+
+from app.core.config import settings
 
 # Services
 from app.application.services.auth_service import AuthService
@@ -88,6 +95,20 @@ def get_unit_of_work(
 
 
 # ==========================================
+# Message Publisher Dependency
+# ==========================================
+
+def get_message_publisher() -> IMessagePublisher:
+    if settings.RABBITMQ_URL:
+        return RabbitMQPublisher(
+            url=settings.RABBITMQ_URL,
+            queue_name=settings.CV_JOB_QUEUE
+        )
+
+    return LoggingPublisher()
+
+
+# ==========================================
 # File Service Dependency
 # ==========================================
 
@@ -107,6 +128,10 @@ def get_file_service(
     unit_of_work: Annotated[
         IUnitOfWork,
         Depends(get_unit_of_work)
+    ],
+    message_publisher: Annotated[
+        IMessagePublisher,
+        Depends(get_message_publisher)
     ]
 ) -> FileService:
 
@@ -114,5 +139,6 @@ def get_file_service(
         storage=file_storage,
         source_file_repository=source_file_repository,
         profile_repository=profile_repository,
-        unit_of_work=unit_of_work
+        unit_of_work=unit_of_work,
+        message_publisher=message_publisher
     )

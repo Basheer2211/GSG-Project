@@ -21,6 +21,7 @@ from app.core.exceptions import (
     EmptyFileError,
     FileTooLargeError,
     InvalidFileContentError,
+    DuplicateFileError,
 )
 
 
@@ -69,11 +70,26 @@ async def upload_cv(
         # Step 4: Return result
         return {
             "file_id": result.file_id,
+            "job_id": result.file_id,
+            "status": result.status,
             "filename": result.filename,
             "size": result.size,
             "file_hash": result.file_hash,
             "message": "CV uploaded successfully"
         }
+
+    except DuplicateFileError as exc:
+        # FR-012: identical source changes nothing; tell the user it
+        # was already uploaded and point to the existing job
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "This file was already uploaded",
+                "file_id": exc.existing_file_id,
+                "job_id": exc.existing_file_id,
+                "status": exc.existing_status
+            }
+        ) from exc
 
     except FileTooLargeError as exc:
         raise HTTPException(

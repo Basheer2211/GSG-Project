@@ -9,3 +9,4 @@ pydantic[email]
 pwdlib[argon2]
 PyJWT
 filetype
+pika
