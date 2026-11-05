@@ -19,7 +19,8 @@ dependencies = [
     "pydantic[email]",
     "pwdlib[argon2]",
     "PyJWT",
-    "filetype"
+    "filetype",
+    "langchain-core"
 ]
 
 [tool.setuptools.packages.find]
