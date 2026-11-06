@@ -1,4 +1,3 @@
-
 fastapi
 uvicorn[standard]
 sqlalchemy
@@ -9,4 +8,4 @@ python-multipart
 pydantic[email]
 pwdlib[argon2]
 PyJWT
-
+filetype

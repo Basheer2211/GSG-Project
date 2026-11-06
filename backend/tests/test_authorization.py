@@ -1,16 +1,25 @@
 """Authentication, role guard and ownership checks over HTTP (NFR-016)."""
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Annotated
 
 import jwt
 import pytest
 from fastapi import Depends
+from fastapi.dependencies.models import Dependant
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from app.application.authorization import ensure_can_access
 from app.core.config import settings
-from app.core.dependencies import CurrentUser, get_user_repository, require_permission
+from app.core.dependencies import (
+    CurrentUser,
+    get_current_user,
+    get_file_service,
+    get_user_repository,
+    require_permission,
+)
 from app.domain.entities.user import User
 from app.domain.enums.user_role import UserRole
 from app.domain.permissions import Permission
@@ -138,3 +147,84 @@ def test_administrator_can_access_any_candidates_data(client, make_user):
     candidate = make_user(UserRole.CANDIDATE)
     response = client.get(f"/_test/candidates/{candidate.user_id}/profile", headers=auth_header(admin))
     assert response.status_code == 200
+
+
+# --- real endpoints ---------------------------------------------------------
+
+class FakeFileService:
+    """Records uploads so tests can prove a denied request stored nothing."""
+
+    def __init__(self) -> None:
+        self.uploaded_for: list[int] = []
+
+    async def upload_cv(self, file, user_id: int) -> SimpleNamespace:
+        self.uploaded_for.append(user_id)
+        return SimpleNamespace(
+            file_id=1,
+            filename=file.filename,
+            size=len(file.content),
+            file_hash="fake",
+            status="uploaded",
+            queued=True,
+        )
+
+
+@pytest.fixture
+def file_service():
+    service = FakeFileService()
+    app.dependency_overrides[get_file_service] = lambda: service
+    yield service
+
+
+def _upload(client, headers=None):
+    return client.post(
+        "/api/v1/cv/upload",
+        files={"file": ("cv.md", b"# CV", "text/markdown")},
+        headers=headers or {},
+    )
+
+
+def test_candidate_can_upload_cv_as_themselves(client, file_service, make_user):
+    candidate = make_user(UserRole.CANDIDATE)
+    response = _upload(client, auth_header(candidate))
+    assert response.status_code == 201
+    assert file_service.uploaded_for == [candidate.user_id]
+
+
+@pytest.mark.parametrize("role", [UserRole.REVIEWER, UserRole.ADMINISTRATOR])
+def test_only_candidates_can_upload_cv(client, file_service, make_user, role):
+    response = _upload(client, auth_header(make_user(role)))
+    assert response.status_code == 403
+    assert file_service.uploaded_for == []
+
+
+def test_upload_requires_login(client, file_service):
+    assert _upload(client).status_code == 401
+    assert file_service.uploaded_for == []
+
+
+PUBLIC_ROUTES = {
+    "/health",
+    "/health/db",
+    "/api/v1/auth/register",
+    "/api/v1/auth/login",
+}
+
+
+def _depends_on_login(dependant: Dependant) -> bool:
+    return any(
+        d.call is get_current_user or _depends_on_login(d)
+        for d in dependant.dependencies
+    )
+
+
+def test_every_route_requires_login_unless_listed_as_public():
+    """A new endpoint fails here until it is guarded or listed as public."""
+    unguarded = {
+        route.path
+        for route in app.routes
+        if isinstance(route, APIRoute)
+        and route.path not in PUBLIC_ROUTES
+        and not _depends_on_login(route.dependant)
+    }
+    assert unguarded == set()

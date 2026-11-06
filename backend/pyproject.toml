@@ -18,7 +18,8 @@ dependencies = [
     "python-multipart",
     "pydantic[email]",
     "pwdlib[argon2]",
-    "PyJWT"
+    "PyJWT",
+    "filetype"
 ]
 
 [project.optional-dependencies]
